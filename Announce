@@ -6,6 +6,8 @@ NetBSD, Columbia, and other versions.
 
 New features in version 2.4 include:
 
+	Added static DHCP allocation capabilities.
+		Use: :dl=leasetime for DHCP leasetime handouts
 	Added a simple BOOTP gateway program: bootpgw
 	Allow host name anywhere IP address is expected.
 	Automatically lookup the IP address when the name of a
@@ -49,12 +51,19 @@ Systems on which I have seen this code work:
 	SunOS 4.X (Solaris 1.X)
 	SunOS 5.X (Solaris 2.X)
 	System V/386 Rel. 4.0
+	Linux 1.1.81
 
 Systems on which others say this code works:
 	CDC EP/IX (1.4.3, 2.1.1)
 	DEC Ultrix (4.2, 4.3)
-	Linux 1.1.81
 	OSF/1 (DEC Alpha CPU)
+	HP 9000
+
+How to get the latest version:
+	ftp firewall.mc.com (anonymous)
+	cd /pub
+	binary
+	get bootp-2.4.2.tar.Z
 
 Please direct questions, comments, and bug reports to:
 	<bootp@andrew.cmu.edu>

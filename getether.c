@@ -329,7 +329,9 @@ getether(ifname, eap)
 #include <memory.h>
 #include <sys/ioctl.h>
 #include <net/if.h>	       	/* struct ifreq */
+#if !defined(__GLIBC__)
 #include <sys/socketio.h>	/* Needed for IOCTL defs */
+#endif
 
 int
 getether(ifname, eap)

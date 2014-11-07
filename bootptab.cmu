@@ -1,4 +1,4 @@
-# /etc/bootptab: database for bootp server (/etc/bootpd)
+# /etc/bootptab: database for bootp server (/usr/sbin/bootpd)
 # (I've hacked on this but can't test it... -gwr)
 
 # Blank lines and lines beginning with '#' are ignored.
@@ -33,6 +33,8 @@
 #	to -- time offset (seconds)
 #	ts -- time servers
 #	vm -- vendor magic number
+#	ys -- NIS server
+#	yd -- NIS domain
 #	Tn -- generic option tag n
 #
 # Be careful about including backslashes where they're needed.  Weird (bad)

@@ -49,13 +49,3 @@ the client IP address field for zero. (bp->bp_ciaddr == 0)
 #endif
 
 ----------------------------------------------------------------------
-DHCP Support:
-
-There is a set of patches from Jeanette Pauline Middelink
-<middelin@calvin.polyware.iaf.nl> to add DHCP support.
-
-Those patches will be integrated into the BOOTP release stream
-very soon, but if you can't wait, you can get them from:
-nimbus.anu.edu.au:/pub/tridge/samba/contributed/DHCP.patch
-
-----------------------------------------------------------------------

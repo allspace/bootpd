@@ -41,6 +41,7 @@ char *usage = "bootptest [-h] server-name [vendor-data-template-file]";
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#include <sys/select.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -50,6 +51,9 @@ char *usage = "bootptest [-h] server-name [vendor-data-template-file]";
 #include <unistd.h>
 #endif
 
+#ifndef	NO_UNISTD
+#include <unistd.h>
+#endif
 #include <stdlib.h>
 #include <signal.h>
 #include <stdio.h>
@@ -66,6 +70,9 @@ char *usage = "bootptest [-h] server-name [vendor-data-template-file]";
 
 #include "patchlevel.h"
 
+static void send_request();
+
+extern int getether();
 static void send_request();
 
 #define LOG_ERR 1
@@ -125,7 +132,7 @@ extern void bootp_print();
  * the receiver loop is started.  Die when interrupted.
  */
 
-void
+int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -137,12 +144,17 @@ main(argc, argv)
 	char *servername = NULL;
 	char *vendor_file = NULL;
 	char *bp_file = NULL;
-	int32 server_addr;			/* inet addr, network order */
+	int32_t server_addr;			/* inet addr, network order */
 	int s;						/* Socket file descriptor */
+#if !defined(__GLIBC__)
 	int n, fromlen, recvcnt;
+#else /* __GLIBC__ */
+        int n, recvcnt;
+        socklen_t fromlen;
+#endif /* __GLIBC__ */   
 	int use_hwa = 0;
-	int32 vend_magic;
-	int32 xid;
+	int32_t vend_magic;
+	int32_t xid;
 
 	progname = strrchr(argv[0], '/');
 	if (progname)
@@ -304,8 +316,8 @@ main(argc, argv)
 	bp = (struct bootp *) sndbuf;
 	bzero(bp, sizeof(*bp));
 	bp->bp_op = BOOTREQUEST;
-	xid = (int32) getpid();
-	bp->bp_xid = (u_int32) htonl(xid);
+	xid = (int32_t) getpid();
+	bp->bp_xid = (u_int32_t) htonl(xid);
 	if (bp_file)
 		strncpy(bp->bp_file, bp_file, BP_FILE_LEN);
 
@@ -384,12 +396,13 @@ main(argc, argv)
 	send_request(s);
 	while (1) {
 		struct timeval tv;
-		int readfds;
+		fd_set readfds;
 
 		tv.tv_sec = WAITSECS;
 		tv.tv_usec = 0L;
-		readfds = (1 << s);
-		n = select(s + 1, (fd_set *) & readfds, NULL, NULL, &tv);
+		FD_ZERO(&readfds);
+		FD_SET(s, &readfds);
+		n = select(s + 1, &readfds, NULL, NULL, &tv);
 		if (n < 0) {
 			perror("select");
 			break;
@@ -436,7 +449,7 @@ main(argc, argv)
 		 */
 	}
 	fprintf(stderr, "no response from %s\n", servername);
-	exit(1);
+	return 1;
 }
 
 static void

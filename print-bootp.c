@@ -120,7 +120,7 @@ bootp_print(bp, length, sport, dport)
 		printf(" hops:%d", bp->bp_hops);
 
 	if (bp->bp_xid)
-		printf(" xid:%d", ntohl(bp->bp_xid));
+		printf(" xid:%lu", (unsigned long) ntohl(bp->bp_xid));
 
 	if (bp->bp_secs)
 		printf(" secs:%d", ntohs(bp->bp_secs));
@@ -172,9 +172,9 @@ bootp_print(bp, length, sport, dport)
 
 	TCHECK(bp->bp_vend[0], vdlen);
 	printf(" vend");
-	if (!bcmp(bp->bp_vend, vm_rfc1048, sizeof(u_int32)))
+	if (!bcmp(bp->bp_vend, vm_rfc1048, sizeof(u_int32_t)))
 		rfc1048_print(bp->bp_vend, vdlen);
-	else if (!bcmp(bp->bp_vend, vm_cmu, sizeof(u_int32)))
+	else if (!bcmp(bp->bp_vend, vm_cmu, sizeof(u_int32_t)))
 		cmu_print(bp->bp_vend, vdlen);
 	else
 		other_print(bp->bp_vend, vdlen);
@@ -194,7 +194,7 @@ bootp_print(bp, length, sport, dport)
  * a: ASCII
  * b: byte (8-bit)
  * i: inet address
- * l: int32
+ * l: int32_t
  * s: short (16-bit)
  */
 char *
@@ -268,7 +268,14 @@ rfc1048_opts[] = {
 	"iXW-FS",			/* 48: X Window System Font Servers */
 	"iXW-DM",			/* 49: X Window System Display Managers */
 
-	/* DHCP extensions (RFC-1533, sect. 9) */
+#ifdef DHCP
+	/* DHCP extensions (RFC-1533, sect. 9) PeP hic facet */
+	"iDHCPreq",			/* 50: DHCP requested IP address */
+	"lDHCPlease",		/* 51: DHCP lease time */ 
+	"bDHCPooptol",		/* 52: DHCP option overload */
+	"bDHCPtype",		/* 53: DHCP message type */
+	"iDHCPSid",			/* 54: DHCP server ID */
+#endif
 #endif
 };
 #define	KNOWN_OPTIONS (sizeof(rfc1048_opts) / sizeof(rfc1048_opts[0]))
@@ -281,7 +288,7 @@ rfc1048_print(bp, length)
 	u_char tag;
 	u_char *ep;
 	register int len;
-	u_int32 ul;
+	u_int32_t ul;
 	u_short us;
 	struct in_addr ia;
 	char *optstr;
@@ -289,7 +296,7 @@ rfc1048_print(bp, length)
 	printf("-rfc1395");
 
 	/* Step over magic cookie */
-	bp += sizeof(int32);
+	bp += sizeof(int32_t);
 	/* Setup end pointer */
 	ep = bp + length;
 	while (bp < ep) {
@@ -310,7 +317,7 @@ rfc1048_print(bp, length)
 		len = *bp++;
 		if (bp + len > ep) {
 			/* truncated option */
-			printf(" |(%d>%d)", len, ep - bp);
+			printf(" |(%d>%ld)", len, (long) (ep - bp));
 			return;
 		}
 		/* Print the option value(s). */
@@ -336,7 +343,7 @@ rfc1048_print(bp, length)
 		case 'l':				/* Long words */
 			while (len >= 4) {
 				bcopy((char *) bp, (char *) &ul, 4);
-				printf("%d", ntohl(ul));
+				printf("%lu", (unsigned long) ntohl(ul));
 				bp += 4;
 				len -= 4;
 				if (len) printf(",");

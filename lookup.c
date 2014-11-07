@@ -12,8 +12,12 @@
 #include <netinet/in.h>
 
 #ifdef	ETC_ETHERS
+#ifdef __GLIBC__
+#include <netinet/ether.h>
+#else
 #include <netinet/if_ether.h>
 extern int ether_hostton();
+#endif
 #endif
 
 #include <netdb.h>
@@ -72,7 +76,7 @@ lookup_hwa(hostname, htype)
 int
 lookup_ipa(hostname, result)
 	char *hostname;
-	u_int32 *result;
+	u_int32_t *result;
 {
 	struct hostent *hp;
 	hp = gethostbyname(hostname);
@@ -93,10 +97,10 @@ lookup_ipa(hostname, result)
  */
 int
 lookup_netmask(addr, result)
-	u_int32 addr;				/* both in network order */
-	u_int32 *result;
+	u_int32_t addr;				/* both in network order */
+	u_int32_t *result;
 {
-	int32 m, a;
+	int32_t m, a;
 
 	a = ntohl(addr);
 	m = 0;

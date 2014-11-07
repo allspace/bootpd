@@ -4,15 +4,6 @@
 #define	BPTYPES_H
 
 /*
- * 32 bit integers are different types on various architectures
- */
-
-#ifndef	int32
-#define int32 long
-#endif
-typedef unsigned int32 u_int32;
-
-/*
  * Nice typedefs. . .
  */
 

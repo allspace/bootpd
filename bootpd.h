@@ -25,6 +25,7 @@ SOFTWARE.
  * bootpd.h -- common header file for all the modules of the bootpd program.
  */
 
+#include <sys/types.h>
 #include "bptypes.h"
 #include "hash.h"
 #include "hwaddr.h"
@@ -126,6 +127,9 @@ struct flag {
 		exec_file	:1,
 		msg_size	:1,
 		min_wait	:1,
+#ifdef DHCP
+		dhcp_lease	:1,	/* PeP hic facet */
+#endif
 		/* XXX - Add new tags here */
 		vm_cookie	:1;
 };
@@ -180,10 +184,13 @@ struct host {
 			    htype,  /* RFC826 says this should be 16-bits but
 				       RFC951 only allocates 1 byte. . . */
 			    haddr[MAXHADDRLEN];
-    int32		    time_offset;
-    unsigned int32	    bootsize,
+    int32_t		    time_offset;
+    u_int32_t		    bootsize,
 			    msg_size,
 			    min_wait;
+#ifdef DHCP
+    u_int32_t		    dhcp_lease; /* PeP hic facet */
+#endif
     struct in_addr	    bootserver,
 			    iaddr,
 			    swap_server,

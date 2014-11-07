@@ -5,10 +5,13 @@ bootpef \- BOOTP Extension File compiler
 .SH SYNOPSIS
 .LP
 .B bootpef
-.RI [ "-c chdir" ]
-.RI [ "-d debug-level" ]
-.RI [ "-f config-file" ]
-.RI [ client-name " [...]]"
+.RB [ " \-c"
+.IR chdir " ]"
+.RB [ " \-d"
+.IR debug-level " ]"
+.RB [ "-f"
+.IR config-file " ]"
+.RI "[ " client-name " [...]]"
 .SH DESCRIPTION
 .B bootpef
 builds the
@@ -28,7 +31,8 @@ while creating extension files.  This is useful when the
 extension file names are specified as relative pathnames, and
 .I bootpef
 needs to use the same current directory as the TFTP server
-(typically /tftpboot).
+(typically 
+.IR /tftpboot ).
 .TP
 .BI \-d \ debug\-level
 Sets the
@@ -40,7 +44,8 @@ For example, -d4 or -d 4 will set the debugging level to 4.
 Set the name of the config file that specifies the option
 data to be sent to each client.
 .SH "SEE ALSO"
-bootpd(8), tftpd(8)
+.BR bootpd (8), 
+.BR tftpd (8)
 .SH REFERENCES
 .TP
 RFC951

@@ -48,7 +48,6 @@
 #define	ATF_INUSE 0
 #endif
 
-#include "bptypes.h"
 #include "hwaddr.h"
 #include "report.h"
 

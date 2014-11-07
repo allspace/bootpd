@@ -14,12 +14,33 @@ Date, <email> Real Name
 	bad IP address caused "network unreachable" errors.
 	[Thanks to andrew@ntplx.net (Andrew Lindh) for the fix!]
 
+--> bootpd-2.4.3
+
+11/19/95  joey@infodrom.north.de (Martin Schulze)
+	Fixed a problem that DHCP lease time is send in every request
+	independend of the existence of a dl tag.
+	Corrected some NEED()-calls with wrong arguments (only some text)
+	Added support for -v (version) in bootpd and bootpgw.
+
+08/07/95  middelin@polyware.iaf.nl (Pauline Middelink)
+	Fixed problem while reporting duplicate hardware address in
+	readfile.c (kerry@maine.maine.edu)
+	Changed some code to allow the giaddr to pass through. Needed
+	when the client request is forwarded to us through a gateway.
+	(Broadcasting to the gateway will not reach the client)
+	
+01/26/95  Phil.Packer@bbc.co.uk (Phil.Packer)
+	Added dl tag for DHCP lease and rejigged Pauline's codes
+	at the end of bootpd.c to allow the setting of explicit leases.
+	Added "sco" Makefile target.
+	
 --> bootp-2.4.2
 
 01/14/95  middelin@polyware.iaf.nl (Pauline Middelink)
 	Corrected support for the Linux networking code.
 	Fixed lots of warnings (gcc -Wall)
 	Added "linux" Makefile target.
+	Written code for DHCP static IP allocation.
 
 01/02/95  Jukka Ukkonen <ukkonen@csc.fi>
 	Allow bootptab syntax: ha="0:0:c0:80:e8:a7"

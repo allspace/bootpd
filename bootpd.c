@@ -46,6 +46,7 @@ SOFTWARE.
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#include <sys/select.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -76,6 +77,23 @@ SOFTWARE.
 # define bzero(p,l)      memset(p,0,l)
 # define bcmp(a,b,c)     memcmp(a,b,c)
 #endif
+#ifdef __linux__
+/* Use sigaction to make signal last... */
+inline void (*signal(int sig,void (*handler)(int)))(int) {
+#if !defined(__GLIBC__)
+	struct sigaction so,sa = {NULL,0,SA_NOMASK|SA_RESTART,NULL};
+#else /* __GLIBC__ */
+	struct sigaction so,sa;
+        so.sa_handler = NULL;
+        so.sa_flags = sa.sa_flags = SA_NOMASK|SA_RESTART;
+        sigemptyset(&so.sa_mask);
+        sigemptyset(&sa.sa_mask);
+#endif /* __GLIBC__ */
+	sa.sa_handler = handler;
+	if (sigaction(sig,&sa,&so)<0) return NULL;
+	return so.sa_handler;
+}
+#endif
 
 #include "bootp.h"
 #include "hash.h"
@@ -92,7 +110,7 @@ SOFTWARE.
 #define CONFIG_FILE		"/etc/bootptab"
 #endif
 #ifndef DUMPTAB_FILE
-#define DUMPTAB_FILE		"/tmp/bootpd.dump"
+#define DUMPTAB_FILE		"/var/run/bootpd.dump"
 #endif
 
 
@@ -110,15 +128,25 @@ SOFTWARE.
 extern void dumptab P((char *));
 
 PRIVATE void catcher P((int));
-PRIVATE int chk_access P((char *, int32 *));
+PRIVATE int chk_access P((char *, int32_t *));
 #ifdef VEND_CMU
 PRIVATE void dovend_cmu P((struct bootp *, struct host *));
 #endif
-PRIVATE void dovend_rfc1048 P((struct bootp *, struct host *, int32));
+PRIVATE int  dovend_rfc1048 P((struct bootp *, struct host *, int32_t));
 PRIVATE void handle_reply P((void));
 PRIVATE void handle_request P((void));
-PRIVATE void sendreply P((int forward, int32 dest_override));
+PRIVATE void sendreply P((int forward, int32_t dest_override));
 PRIVATE void usage P((void));
+
+#ifdef DHCP
+PRIVATE int dhcp_discover P((struct bootp *, struct host *, byte *, int));
+PRIVATE int dhcp_request P((struct bootp *, struct host *, byte *, int));
+PRIVATE int dhcp_decline P((struct bootp *, struct host *, byte *, int));
+PRIVATE int dhcp_release P((struct bootp *, struct host *, byte *, int));
+PRIVATE int dhcp_offer P((struct bootp *, struct host *, byte *, int));
+PRIVATE int dhcp_ack P((struct bootp *, struct host *, byte *, int));
+PRIVATE int dhcp_lease P((struct bootp *, struct host *, byte **));
+#endif
 
 #undef	P
 
@@ -159,7 +187,6 @@ char *progname;
 char *chdir_path;
 struct in_addr my_ip_addr;
 
-struct utsname my_uname;
 char *hostname;
 
 /* Flags set by signal catcher. */
@@ -180,7 +207,7 @@ char *bootpd_dump = DUMPTAB_FILE;
  * main server loop is started.
  */
 
-void
+int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -189,9 +216,16 @@ main(argc, argv)
 	struct bootp *bp;
 	struct servent *servp;
 	struct hostent *hep;
+	struct utsname my_uname;
 	char *stmp;
+#if !defined(__GLIBC__)
 	int n, ba_len, ra_len;
-	int nfound, readfds;
+#else /* __GLIBC__ */
+        int n;
+        socklen_t ra_len, ba_len;
+#endif /* __GLIBC__ */   
+	int nfound;
+	fd_set readfds;
 	int standalone;
 #ifdef	SA_NOCLDSTOP	/* Have POSIX sigaction(2). */
 	struct sigaction sa;
@@ -343,7 +377,7 @@ main(argc, argv)
 						"%s: invalid timeout specification\n", progname);
 				break;
 			}
-			actualtimeout.tv_sec = (int32) (60 * n);
+			actualtimeout.tv_sec = (int32_t) (60 * n);
 			/*
 			 * If the actual timeout is zero, pass a NULL pointer
 			 * to select so it blocks indefinitely, otherwise,
@@ -351,6 +385,14 @@ main(argc, argv)
 			 */
 			timeout = (n > 0) ? &actualtimeout : NULL;
 			break;
+
+			case 'v':
+#ifdef DHCP
+			printf("bootpd+dhcp %s.%d\n", VERSION, PATCHLEVEL);
+#else
+			printf("bootpd %s.%d\n", VERSION, PATCHLEVEL);
+#endif
+			exit (0);
 
 		default:
 			fprintf(stderr, "%s: unknown switch: -%c\n",
@@ -380,6 +422,11 @@ main(argc, argv)
 		exit(1);
 	}
 	bcopy(hep->h_addr, (char *)&my_ip_addr, sizeof(my_ip_addr));
+	hostname = strdup(hep->h_name);
+	if (!hostname) {
+		report(LOG_ERR, "strdup failed");
+		exit(1);
+	}
 
 	if (standalone) {
 		/*
@@ -477,6 +524,17 @@ main(argc, argv)
 		bootpc_port = (u_short) IPPORT_BOOTPC;
 	}
 
+#ifdef DHCP
+	/*
+	 * Maybe we have to broadcast, so enable it.
+	 */
+	n = 1;
+	if (setsockopt(s,SOL_SOCKET,SO_BROADCAST,&n,sizeof(n))<0) {
+		report(LOG_ERR, "setsockopt: %s\n", get_errmsg());
+		exit(1);
+	}
+#endif
+
 	/*
 	 * Set up signals to read or dump the table.
 	 */
@@ -510,11 +568,12 @@ main(argc, argv)
 	for (;;) {
 		struct timeval tv;
 
-		readfds = 1 << s;
+		FD_ZERO(&readfds);
+		FD_SET(s, &readfds);
 		if (timeout)
 			tv = *timeout;
 
-		nfound = select(s + 1, (fd_set *)&readfds, NULL, NULL,
+		nfound = select(s + 1, &readfds, NULL, NULL,
 						(timeout) ? &tv : NULL);
 		if (nfound < 0) {
 			if (errno != EINTR) {
@@ -534,7 +593,7 @@ main(argc, argv)
 			}
 			continue;
 		}
-		if (!(readfds & (1 << s))) {
+		if (!FD_ISSET(s, &readfds)) {
 			if (debug > 1)
 				report(LOG_INFO, "exiting after %ld minutes of inactivity",
 					   actualtimeout.tv_sec / 60);
@@ -569,6 +628,8 @@ main(argc, argv)
 			break;
 		}
 	}
+
+	return 0;
 }
 
 
@@ -625,13 +686,15 @@ handle_request()
 	struct bootp *bp = (struct bootp *) pktbuf;
 	struct host *hp = NULL;
 	struct host dummyhost;
-	int32 bootsize = 0;
+	struct hostent *hep;
+	int32_t bootsize = 0;
 	unsigned hlen, hashcode;
-	int32 dest;
+	int32_t dest;
 	char realpath[1024];
 	char *clntpath;
 	char *homedir, *bootfile;
 	int n;
+	int lpos;
 
 	/* XXX - SLIP init: Set bp_ciaddr = recv_addr here? */
 
@@ -641,7 +704,8 @@ handle_request()
 	 * If the server name field is null, throw in our name.
 	 */
 	if (strlen(bp->bp_sname)) {
-		if (strcmp(bp->bp_sname, hostname)) {
+		hep = gethostbyname(bp->bp_sname);
+		if (!hep || strcmp(hep->h_name, hostname)) {
 			if (debug)
 				report(LOG_INFO, "\
 ignoring request for server %s from client at %s address %s",
@@ -653,6 +717,16 @@ ignoring request for server %s from client at %s address %s",
 	} else {
 		strcpy(bp->bp_sname, hostname);
 	}
+
+	/* cevans - security as reported on Bugtraq! */
+	if (bp->bp_htype >= hwinfocnt) {
+		if (debug)
+			report(LOG_INFO,
+				"Request with unknown network type %u",
+				bp->bp_htype);
+		return;
+	}
+
 
 	/* Convert the request into a reply. */
 	bp->bp_op = BOOTREPLY;
@@ -668,7 +742,7 @@ ignoring request for server %s from client at %s address %s",
 		}
 		hlen = haddrlength(bp->bp_htype);
 		if (hlen != bp->bp_hlen) {
-			report(LOG_NOTICE, "bad addr len from from %s address %s",
+			report(LOG_NOTICE, "bad addr len from %s address %s",
 				   netname(bp->bp_htype),
 				   haddrtoa(bp->bp_chaddr, hlen));
 		}
@@ -701,7 +775,6 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 					   haddrtoa(bp->bp_chaddr, bp->bp_hlen));
 			return; /* not found */
 		}
-		(bp->bp_yiaddr).s_addr = hp->iaddr.s_addr;
 
 	} else {
 
@@ -724,6 +797,7 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 			return;
 		}
 	}
+	(bp->bp_yiaddr).s_addr = hp->iaddr.s_addr;
 
 	if (debug) {
 		report(LOG_INFO, "found %s (%s)", inet_ntoa(hp->iaddr),
@@ -735,7 +809,7 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * with a timestamp lower than the threshold.
 	 */
 	if (hp->flags.min_wait) {
-		u_int32 t = (u_int32) ntohs(bp->bp_secs);
+		u_int32_t t = (u_int32_t) ntohs(bp->bp_secs);
 		if (t < hp->min_wait) {
 			if (debug > 1)
 				report(LOG_INFO,
@@ -759,11 +833,9 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	/* Run a program, passing the client name as a parameter. */
 	if (hp->flags.exec_file) {
 		char tst[100];
-		/* XXX - Check string lengths? -gwr */
-		strcpy (tst, hp->exec_file->string);
-		strcat (tst, " ");
-		strcat (tst, hp->hostname->string);
-		strcat (tst, " &");
+		snprintf(tst, sizeof(tst), "%s %s &",
+			hp->exec_file->string,
+			hp->hostname->string);
 		if (debug)
 			report(LOG_INFO, "executing %s", tst);
 		system(tst);	/* Hope this finishes soon... */
@@ -829,13 +901,20 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * The "real" path is as seen by the BOOTP daemon on this
 	 * machine, while the client path is relative to the TFTP
 	 * daemon chroot directory (i.e. /tftpboot).
+	 *
+	 * The bootfile might not be properly zero terminated. We
+	 * need to play safe - AC
 	 */
 	if (hp->flags.tftpdir) {
+		lpos=strlen(hp->tftpdir->string);
+		if(lpos>=sizeof(realpath)-1)
+			return;
 		strcpy(realpath, hp->tftpdir->string);
-		clntpath = &realpath[strlen(realpath)];
+		clntpath = &realpath[lpos];
 	} else {
 		realpath[0] = '\0';
 		clntpath = realpath;
+		lpos=0;
 	}
 
 	/*
@@ -876,12 +955,18 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	if (homedir) {
 		if (homedir[0] != '/')
 			strcat(clntpath, "/");
+		lpos+=strlen(homedir);
+		if(lpos>=sizeof(realpath))
+			return;
 		strcat(clntpath, homedir);
 		homedir = NULL;
 	}
 	if (bootfile) {
 		if (bootfile[0] != '/')
 			strcat(clntpath, "/");
+		lpos+=strlen(bootfile);
+		if(lpos>=sizeof(realpath))
+			return;
 		strcat(clntpath, bootfile);
 		bootfile = NULL;
 	}
@@ -890,8 +975,15 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * First try to find the file with a ".host" suffix
 	 */
 	n = strlen(clntpath);
-	strcat(clntpath, ".");
-	strcat(clntpath, hp->hostname->string);
+	
+	/*
+	 *	Don't test if it wont fit.
+	 */
+	if(n+1+strlen(hp->hostname->string)<sizeof(realpath))
+	{
+		strcat(clntpath, ".");
+		strcat(clntpath, hp->hostname->string);
+	}
 	if (chk_access(realpath, &bootsize) < 0) {
 		clntpath[n] = 0;			/* Try it without the suffix */
 		if (chk_access(realpath, &bootsize) < 0) {
@@ -961,7 +1053,8 @@ null_file_name:
 	 */
 	if (!bcmp(bp->bp_vend, vm_rfc1048, 4)) {
 		/* RFC1048 conformant bootp client */
-		dovend_rfc1048(bp, hp, bootsize);
+		if (!dovend_rfc1048(bp, hp, bootsize))
+			return;
 		if (debug > 1) {
 			report(LOG_INFO, "sending reply (with RFC1048 options)");
 		}
@@ -1009,19 +1102,13 @@ handle_reply()
 PRIVATE void
 sendreply(forward, dst_override)
 	int forward;
-	int32 dst_override;
+	int32_t dst_override;
 {
 	struct bootp *bp = (struct bootp *) pktbuf;
 	struct in_addr dst;
 	u_short port = bootpc_port;
 	unsigned char *ha;
 	int len, haf;
-
-	/*
-	 * XXX - Should honor bp_flags "broadcast" bit here.
-	 * Temporary workaround: use the :ra=ADDR: option to
-	 * set the reply address to the broadcast address.
-	 */
 
 	/*
 	 * If the destination address was specified explicitly
@@ -1047,6 +1134,23 @@ sendreply(forward, dst_override)
 		if (debug > 1) {
 			report(LOG_INFO, "sending reply to gateway %s",
 				   inet_ntoa(dst));
+		}
+	} else if (ntohs(bp->bp_flags) & 0x8000) {
+		struct ifreq *ifr;
+		ifr = getif(s, &bp->bp_yiaddr);
+		if (ifr) {
+			struct sockaddr_in *bip;
+			struct ifreq myreq;
+			strcpy( myreq.ifr_name, ifr->ifr_name );
+			if (ioctl(s, SIOCGIFBRDADDR, &myreq) < 0) {
+			    report(LOG_ERR, "ioctl SIOCGIFBRDADDR");
+			    dst.s_addr = INADDR_BROADCAST;
+			} else {
+			    bip = (struct sockaddr_in *)&myreq.ifr_broadaddr;
+			    dst = bip->sin_addr;
+			}
+		} else {
+			dst.s_addr = INADDR_BROADCAST;
 		}
 	} else {
 		dst = bp->bp_yiaddr;
@@ -1125,12 +1229,12 @@ sendreply(forward, dst_override)
 PRIVATE int
 chk_access(path, filesize)
 	char *path;
-	int32 *filesize;
+	int32_t *filesize;
 {
 	struct stat st;
 
 	if ((stat(path, &st) == 0) && (st.st_mode & (S_IREAD >> 6))) {
-		*filesize = (int32) st.st_size;
+		*filesize = (int32_t) st.st_size;
 		return 0;
 	} else {
 		return -1;
@@ -1220,16 +1324,20 @@ dovend_cmu(bp, hp)
 	if (bytesleft < (LEN)) { \
 		report(LOG_NOTICE, noroom, \
 			   hp->hostname->string, MSG); \
-		return; \
+		return 0; \
 	} while (0)
-PRIVATE void
+PRIVATE int
 dovend_rfc1048(bp, hp, bootsize)
 	struct bootp *bp;
 	struct host *hp;
-	int32 bootsize;
+	int32_t bootsize;
 {
 	int bytesleft, len;
 	byte *vp;
+#ifdef DHCP
+	int dhcp = 0;
+	int isme = TRUE;	/* DHCP uses this for not-mine-requests */
+#endif
 
 	static char noroom[] = "%s: No room for \"%s\" option";
 
@@ -1280,7 +1388,25 @@ dovend_rfc1048(bp, hp, bootsize)
 				case TAG_SUBNET_MASK:
 					/* XXX - Should preserve this if given... */
 					break;
-				} /* swtich */
+#ifdef DHCP
+				case TAG_DHCP_MSG:
+					dhcp = *p;
+					break;
+				case TAG_DHCP_SERVERID:
+					{
+						struct in_addr tmp_addr;
+						isme = (len == 4) && (
+							memcpy(
+								&tmp_addr, p,
+								sizeof(tmp_addr)
+							),
+							my_ip_addr.s_addr ==
+							tmp_addr.s_addr
+						);
+					}
+					break;
+#endif
+				} /* switch */
 				p += len;
 			}
 
@@ -1347,16 +1473,44 @@ dovend_rfc1048(bp, hp, bootsize)
 		vp += len;
 		*vp++ = TAG_END;
 		bytesleft -= len + 3;
-		return;					/* no more options here. */
+		return 1;				/* no more options here. */
 	}
+
+#ifdef DHCP
 	/*
-	 * The remaining options are inserted by the following
-	 * function (which is shared with bootpef.c).
-	 * Keep back one byte for the TAG_END.
+	 * Check if this is a DHCP request.
 	 */
-	len = dovend_rfc1497(hp, vp, bytesleft - 1);
-	vp += len;
-	bytesleft -= len;
+	if (dhcp!=0) {
+		if (!isme)
+			return 0;	/* Not mine, discard! */
+
+		switch (dhcp) {
+		 case 1 : len = dhcp_discover(bp,hp,vp,bytesleft); break;
+		 case 3 : len = dhcp_request(bp,hp,vp,bytesleft); break;
+		 case 4 : len = dhcp_decline(bp,hp,vp,bytesleft); break;
+		 case 7 : len = dhcp_release(bp,hp,vp,bytesleft); break;
+		 default : report(LOG_NOTICE,"Unknown DHCP request (%d)",dhcp);
+			   return 0;
+		}
+		/* Is there a DHCP reply at all? */
+		if (len==0)
+			return 0;
+		vp += len;
+		bytesleft -= len;
+	}
+	else {
+#endif
+		/*
+		 * The remaining options are inserted by the following
+		 * function (which is shared with bootpef.c).
+		 * Keep back one byte for the TAG_END.
+		 */
+		len = dovend_rfc1497(hp, vp, bytesleft);
+		vp += len;
+		bytesleft -= len;
+#ifdef DHCP
+	}
+#endif
 
 	/* There should be at least one byte left. */
 	NEED(1, "(end)");
@@ -1364,12 +1518,19 @@ dovend_rfc1048(bp, hp, bootsize)
 	bytesleft--;
 
 	/* Log message done by caller. */
+
+	/* Remove unnecessary bits. */
+	pktlen -= bytesleft;
+	bytesleft = 64 - (vp - bp->bp_vend);
 	if (bytesleft > 0) {
 		/*
 		 * Zero out any remaining part of the vendor area.
 		 */
 		bzero(vp, bytesleft);
+		pktlen += bytesleft;
 	}
+
+	return 1;	/* sent reply */
 } /* dovend_rfc1048 */
 #undef	NEED
 
@@ -1389,6 +1550,173 @@ dovend_rfc1048(bp, hp, bootsize)
  */
 
 /* get_errmsg() - now in report.c */
+
+
+#ifdef DHCP
+
+/*
+ * PeP hic facet
+ * Stuff the packet with the Lease info, We need to do this on the Offer and
+ * the ack so separated out here
+ */
+PRIVATE
+int dhcp_lease(bp, hp, vp)
+    struct bootp *bp;
+    struct host *hp;
+    byte **vp;
+{
+	*(*vp)++ = TAG_DHCP_IPRENEW;	/* DHCP Renewal time 50% of lease */
+	*(*vp)++ = 4;			/* Length */
+	insert_u_long(htonl(hp->dhcp_lease/2),vp);
+
+	*(*vp)++ = TAG_DHCP_IPREBIND;	/* DHCP Rebinding time 85% of lease */
+	*(*vp)++ = 4;
+	insert_u_long(htonl(hp->dhcp_lease*7/8),vp);
+	
+	*(*vp)++ = TAG_DHCP_IPLEASE;	/* IP address lease time */
+	*(*vp)++ = 4;			/* Length */
+	insert_u_long(htonl(hp->dhcp_lease),vp); /* PeP hic facet, lets see if this works */
+
+	return(19);
+}
+
+
+/*
+ * Formulate an DHCP_DISCOVER reply
+ */
+PRIVATE
+int dhcp_discover(bp, hp, vp, bytesleft)
+    struct bootp *bp;
+    struct host *hp;
+    byte *vp;
+    int bytesleft;
+{
+	if(debug)
+		report(LOG_INFO, "Received: DHCPDISCOVER");
+	return(dhcp_offer(bp,hp,vp,bytesleft));
+}
+
+/*
+ * formulate an DHCP_RELEASE reply
+ */
+PRIVATE
+int dhcp_release(bp, hp, vp, bytesleft)
+    struct bootp *bp;
+    struct host *hp;
+    byte *vp;
+    int bytesleft;
+{
+	if (debug)
+		report(LOG_INFO, "Received: DHCPRELEASE (discarded)");
+	return 0;
+}
+
+PRIVATE
+int dhcp_offer(bp, hp, vp, bytesleft)
+    struct bootp *bp;
+    struct host *hp;
+    byte *vp;
+    int bytesleft;
+{
+	int len=0;
+	if (debug)
+		report(LOG_INFO, "Sent: DHCPOFFER");
+
+	bp->bp_secs = bp->bp_hops = 0;
+	bp->bp_ciaddr.s_addr = 0;
+
+	*vp++ = TAG_DHCP_MSG;		/* DHCP */
+	*vp++ = 1;			/* length */
+	*vp++ = 2;			/* DHCPOFFER */
+	len +=  3;	
+
+	if (hp->dhcp_lease)
+		len += dhcp_lease(bp,hp,&vp);
+
+	*vp++ = TAG_DHCP_SERVERID;
+	*vp++ = 4;
+	insert_u_long(my_ip_addr.s_addr,&vp);
+	len += 6;
+
+	return len + dovend_rfc1497(hp, vp, bytesleft - len);
+}
+
+/*
+ * Formulate an DHCP_REQUEST reply
+ */
+PRIVATE
+int dhcp_request(bp, hp, vp, bytesleft)
+    struct bootp *bp;
+    struct host *hp;
+    byte *vp;
+    int bytesleft;
+{
+	bp->bp_secs = bp->bp_hops = 0;
+
+	if(debug)
+		report(LOG_INFO,"Received: DHCPREQUEST");
+	/*
+	 * Make absolutely sure that if the client requests an address,
+	 * it is its own address, and also make sure the hardware
+	 * addresses match perfectly. We want to minimize spoofing!
+	 */
+	if ((bp->bp_ciaddr.s_addr && bp->bp_ciaddr.s_addr!=bp->bp_yiaddr.s_addr) ||
+	    bp->bp_htype != hp->htype ||
+            bcmp(bp->bp_chaddr, hp->haddr, haddrlength(hp->htype))) {
+		if (debug)
+			report(LOG_INFO, "Sent: DHCPNAK");
+
+		*vp++ = TAG_DHCP_MSG;	/* DHCPNAK */
+		*vp++ = 1;
+		*vp++ = 6;
+		return 3;
+	}
+	else 
+		return(dhcp_ack(bp,hp,vp,bytesleft));	
+}
+
+PRIVATE
+int dhcp_ack(bp, hp, vp, bytesleft)
+    struct bootp *bp;
+    struct host *hp;
+    byte *vp;
+    int bytesleft;
+{
+	int len=0;
+	if (debug)
+		report(LOG_INFO, "Sent: DHCPACK");
+
+	*vp++ = TAG_DHCP_MSG;	/* DHCPACK */
+	*vp++ = 1;
+	*vp++ = 5;
+	len += 3;
+
+	if (hp->dhcp_lease)
+		len += dhcp_lease(bp,hp,&vp);
+
+	*vp++ = TAG_DHCP_SERVERID;	/* Server id */
+	*vp++ = 4;
+	insert_u_long(my_ip_addr.s_addr,&vp);
+	len += 6;
+
+	return len + dovend_rfc1497(hp, vp, bytesleft - len);
+}
+
+/*
+ * formulate an DHCP_DECLINE reply
+ */
+PRIVATE
+int dhcp_decline(bp, hp, vp, bytesleft)
+    struct bootp *bp;
+    struct host *hp;
+    byte *vp;
+    int bytesleft;
+{
+	if (debug)
+		report(LOG_INFO, "Received: DHCPDECLINE (ignored)");
+	return 0;
+}
+#endif
 
 /*
  * Local Variables:

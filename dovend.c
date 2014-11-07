@@ -57,11 +57,11 @@ dovend_rfc1497(hp, buf, len)
 	int bytesleft = len;
 	byte *vp = buf;
 
-	static char noroom[] = "%s: No room for \"%s\" option";
+	static char noroom[] = "%s: No room for \"%s\" option (%d bytes remaining, %d needed)";
 #define	NEED(LEN, MSG) do                       \
 		if (bytesleft < (LEN)) {         	    \
 			report(LOG_NOTICE, noroom,          \
-				   hp->hostname->string, MSG);  \
+				hp->hostname->string, MSG, bytesleft, LEN);  \
 			return (vp - buf);                  \
 		} while (0)
 
@@ -159,7 +159,7 @@ dovend_rfc1497(hp, buf, len)
 		 * TAG_NIS_DOMAIN and length.
 		 */
 		len = strlen(hp->nis_domain->string);
-		NEED((len + 2), "dn");
+		NEED((len + 2), "yd");
 		*vp++ = TAG_NIS_DOMAIN;
 		*vp++ = (byte) (len & 0xFF);
 		bcopy(hp->nis_domain->string, vp, len);
@@ -185,13 +185,17 @@ dovend_rfc1497(hp, buf, len)
 					  hp->time_server,
 					  &vp, &bytesleft))
 			NEED(8, "ts");
+#ifdef DEBUG
+		if (debug)
+			report(LOG_INFO, "dovend.c(dovend_rfc1497): bytesleft after ts: %d", bytesleft);
+#endif
 	}
 	/* NTP (time) Server (RFC 1129) */
 	if (hp->flags.ntp_server) {
 		if (insert_ip(TAG_NTP_SERVER,
 					  hp->ntp_server,
 					  &vp, &bytesleft))
-			NEED(8, "ts");
+			NEED(8, "nt");
 	}
 	/*
 	 * I wonder:  If the hostname were "promoted" into the BOOTP
@@ -384,7 +388,7 @@ insert_generic(gendata, buff, bytesleft)
 
 void
 insert_u_long(value, dest)
-	u_int32 value;
+	u_int32_t value;
 	byte **dest;
 {
 	byte *temp;

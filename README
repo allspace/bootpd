@@ -60,7 +60,7 @@ Construction:
     Edit your /etc/rc.local or /etc/inetd.conf file to start up bootpd upon
     reboot.  The following is a sample /etc/inetd.conf entry:
 	# BOOTP server
-	bootps dgram udp wait root /usr/etc/bootpd bootpd -i
+	bootps dgram udp wait root /usr/sbin/bootpd bootpd -i
 
 Care and feeding:
     If you change the interface cards on your host or add new hosts you will

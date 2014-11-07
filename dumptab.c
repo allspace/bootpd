@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <syslog.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #ifndef USE_BFUNCS
 #include <memory.h>
@@ -56,7 +58,7 @@ void
 dumptab(filename)
 	char *filename;
 {
-	int n;
+	int n, fd;
 	struct host *hp;
 	FILE *fp;
 	long t;
@@ -103,7 +105,8 @@ dumptab(filename)
 	/*
 	 * Open bootpd.dump file.
 	 */
-	if ((fp = fopen(filename, "w")) == NULL) {
+	fd = open(filename, O_WRONLY | O_CREAT | O_EXCL, 0600);
+	if (fd < 0 || (fp = fdopen(fd, "w")) == NULL) {
 		report(LOG_ERR, "error opening \"%s\": %s",
 			   filename, get_errmsg());
 		exit(1);
@@ -150,7 +153,7 @@ dump_host(fp, hp)
 			if (hp->flags.bootsize_auto) {
 				fprintf(fp, "auto:");
 			} else {
-				fprintf(fp, "%d:", hp->bootsize);
+				fprintf(fp, "%lu:", (unsigned long) hp->bootsize);
 			}
 		}
 		if (hp->flags.cookie_server) {
@@ -218,10 +221,10 @@ dump_host(fp, hp)
 			fprintf(fp, ":");
 		}
 		if (hp->flags.msg_size) {
-			fprintf(fp, "\\\n\t:ms=%d:", hp->msg_size);
+			fprintf(fp, "\\\n\t:ms=%lu:", (unsigned long) hp->msg_size);
 		}
 		if (hp->flags.min_wait) {
-			fprintf(fp, "\\\n\t:mw=%d:", hp->min_wait);
+			fprintf(fp, "\\\n\t:mw=%lu:", (unsigned long) hp->min_wait);
 		}
 		if (hp->flags.name_server) {
 			fprintf(fp, "\\\n\t:ns=");
@@ -260,7 +263,7 @@ dump_host(fp, hp)
 		/* NetBSD: domainname (see above) */
 		/* NetBSD: dumpfile (see above) */
 		if (hp->flags.time_offset) {
-			fprintf(fp, "\\\n\t:to=%ld:", hp->time_offset);
+			fprintf(fp, "\\\n\t:to=%ld:", (long) hp->time_offset);
 		}
 		if (hp->flags.time_server) {
 			fprintf(fp, "\\\n\t:ts=");

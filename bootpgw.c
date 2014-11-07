@@ -38,6 +38,7 @@ SOFTWARE.
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#include <sys/select.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -137,7 +138,7 @@ char *pktbuf;					/* Receive packet buffer */
 int pktlen;
 char *progname;
 char *servername;
-int32 server_ipa;				/* Real server IP address, network order. */
+int32_t server_ipa;				/* Real server IP address, network order. */
 
 struct in_addr my_ip_addr;
 
@@ -153,7 +154,7 @@ char *hostname;
  * main server loop is started.
  */
 
-void
+int
 main(argc, argv)
 	int argc;
 	char **argv;
@@ -163,8 +164,14 @@ main(argc, argv)
 	struct servent *servp;
 	struct hostent *hep;
 	char *stmp;
+#if !defined(__GLIBC__)
 	int n, ba_len, ra_len;
-	int nfound, readfds;
+#else /* __GLIBC__ */
+        int n;
+        socklen_t ra_len, ba_len;
+#endif /* __GLIBC__ */   
+	int nfound;
+	fd_set readfds;
 	int standalone;
 
 	progname = strrchr(argv[0], '/');
@@ -305,7 +312,7 @@ main(argc, argv)
 						"%s: invalid timeout specification\n", progname);
 				break;
 			}
-			actualtimeout.tv_sec = (int32) (60 * n);
+			actualtimeout.tv_sec = (int32_t) (60 * n);
 			/*
 			 * If the actual timeout is zero, pass a NULL pointer
 			 * to select so it blocks indefinitely, otherwise,
@@ -313,6 +320,10 @@ main(argc, argv)
 			 */
 			timeout = (n > 0) ? &actualtimeout : NULL;
 			break;
+
+		case 'v':
+			printf("bootpgw %s.%d\n", VERSION, PATCHLEVEL);
+			exit (0);
 
 		case 'w':				/* wait time */
 			if (argv[0][2]) {
@@ -450,11 +461,12 @@ main(argc, argv)
 	for (;;) {
 		struct timeval tv;
 
-		readfds = 1 << s;
+		FD_ZERO(&readfds);
+		FD_SET(s, &readfds);
 		if (timeout)
 			tv = *timeout;
 
-		nfound = select(s + 1, (fd_set *)&readfds, NULL, NULL,
+		nfound = select(s + 1, &readfds, NULL, NULL,
 						(timeout) ? &tv : NULL);
 		if (nfound < 0) {
 			if (errno != EINTR) {
@@ -462,7 +474,7 @@ main(argc, argv)
 			}
 			continue;
 		}
-		if (!(readfds & (1 << s))) {
+		if (!FD_ISSET(s, &readfds)) {
 			report(LOG_INFO, "exiting after %ld minutes of inactivity",
 				   actualtimeout.tv_sec / 60);
 			exit(0);
@@ -494,6 +506,8 @@ main(argc, argv)
 			break;
 		}
 	}
+
+	return 0;
 }
 
 

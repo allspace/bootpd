@@ -31,25 +31,25 @@ SOFTWARE.
  *
  */
 
-#include "bptypes.h"	/* for int32, u_int32 */
+#include <sys/types.h>
 
 #define BP_CHADDR_LEN	 16
 #define BP_SNAME_LEN	 64
 #define BP_FILE_LEN	128
 #define BP_VEND_LEN	 64
-#define BP_MINPKTSZ	300	/* to check sizeof(struct bootp) */
+#define BP_MINPKTSZ	sizeof(struct bootp)
 
 struct bootp {
     unsigned char    bp_op;			/* packet opcode type */
     unsigned char    bp_htype;			/* hardware addr type */
     unsigned char    bp_hlen;			/* hardware addr length */
     unsigned char    bp_hops;			/* gateway hops */
-    unsigned int32   bp_xid;			/* transaction ID */
+    u_int32_t        bp_xid;			/* transaction ID */
     unsigned short   bp_secs;			/* seconds since boot began */
     unsigned short   bp_flags;			/* RFC1532 broadcast, etc. */
     struct in_addr   bp_ciaddr;			/* client IP address */
     struct in_addr   bp_yiaddr;			/* 'your' IP address */
-    struct in_addr   bp_siaddr;			/* server IP address */
+    struct in_addr   bp_siaddr;			/* (tftp) server IP address */
     struct in_addr   bp_giaddr;			/* gateway IP address */
     unsigned char    bp_chaddr[BP_CHADDR_LEN];	/* client hardware address */
     char	     bp_sname[BP_SNAME_LEN];	/* server host name */
@@ -121,9 +121,17 @@ struct bootp {
 #define TAG_NIS_DOMAIN		((unsigned char)  40)
 #define TAG_NIS_SERVER		((unsigned char)  41)
 #define TAG_NTP_SERVER		((unsigned char)  42)
+#ifdef DHCP
 /* DHCP maximum message size. */
+#define TAG_DHCP_IPLEASE	((unsigned char)  51)
+#define TAG_DHCP_MSG	   	((unsigned char)  53)
+#define TAG_DHCP_SERVERID	((unsigned char)  54)
+#endif
 #define TAG_MAX_MSGSZ		((unsigned char)  57)
-
+#ifdef DHCP
+#define TAG_DHCP_IPRENEW	((unsigned char)  58)	/* PeP hic facet */
+#define TAG_DHCP_IPREBIND	((unsigned char)  59)
+#endif
 /* XXX - Add new tags here */
 
 
@@ -133,13 +141,13 @@ struct bootp {
 
 struct cmu_vend {
 	char		v_magic[4];	/* magic number */
-	unsigned int32	v_flags;	/* flags/opcodes, etc. */
+	u_int32_t	v_flags;	/* flags/opcodes, etc. */
 	struct in_addr 	v_smask;	/* Subnet mask */
 	struct in_addr 	v_dgate;	/* Default gateway */
 	struct in_addr	v_dns1, v_dns2; /* Domain name servers */
 	struct in_addr	v_ins1, v_ins2; /* IEN-116 name servers */
 	struct in_addr	v_ts1, v_ts2;	/* Time servers */
-	int32		v_unused[6];	/* currently unused */
+	int32_t		v_unused[6];	/* currently unused */
 };
 
 

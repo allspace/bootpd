@@ -13,13 +13,13 @@ extern long timezone;
 # include <sys/time.h>
 # include <syslog.h>
 #endif /* SVR4 */
+#include <sys/types.h>
 
-#include "bptypes.h"
 #include "report.h"
 #include "tzone.h"
 
 /* This is what other modules use. */
-int32 secondswest;
+int32_t secondswest;
 
 /*
  * Get our timezone offset so we can give it to clients if the

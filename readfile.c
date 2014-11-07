@@ -33,7 +33,7 @@ SOFTWARE.
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/file.h>
-#include <sys/time.h>
+#include <time.h>
 #include <netinet/in.h>
 
 #include <stdlib.h>
@@ -113,6 +113,11 @@ SOFTWARE.
 #define SYM_EXEC_FILE		 33	/* YORK_EX_OPTION */
 #define SYM_MSG_SIZE 		 34
 #define SYM_MIN_WAIT		 35
+#ifdef DHCP
+#define SYM_DHCP_LEASE		 36	/* RFC 1533 PeP hic facet */
+#define SYM_DHCP_IPRENEW	 37
+#define SYM_DHCP_IPREBIND	 38
+#endif
 /* XXX - Add new tags here */
 
 #define OP_ADDITION		  1	/* Operations on tags */
@@ -144,7 +149,7 @@ struct htypename {
 
 PRIVATE int nhosts;				/* Number of hosts (/w hw or IP address) */
 PRIVATE int nentries;			/* Total number of entries */
-PRIVATE int32 modtime = 0;		/* Last modification time of bootptab */
+PRIVATE int32_t modtime = 0;		/* Last modification time of bootptab */
 PRIVATE char *current_hostname;	/* Name of the current entry. */
 PRIVATE char current_tagname[8];
 
@@ -161,6 +166,9 @@ PRIVATE struct symbolmap symbol_list[] = {
 	{"df", SYM_DUMP_FILE},
 	{"dn", SYM_DOMAIN_NAME},
 	{"ds", SYM_DOMAIN_SERVER},
+#ifdef DHCP
+	{"dl", SYM_DHCP_LEASE},		/* PeP hic facet */
+#endif
 	{"ef", SYM_EXTEN_FILE},
 	{"ex", SYM_EXEC_FILE},		/* YORK_EX_OPTION */
 	{"gw", SYM_GATEWAY},
@@ -255,7 +263,7 @@ PRIVATE struct shared_string *
 	get_shared_string P((char **));
 PRIVATE char *
 	get_string P((char **, char *, u_int *));
-PRIVATE u_int32
+PRIVATE u_int32_t
 	get_u_long P((char **));
 PRIVATE boolean
 	goodname P((char *));
@@ -274,7 +282,7 @@ PRIVATE int
 PRIVATE byte *
 	prs_haddr P((char **, u_int));
 PRIVATE int
-	prs_inetaddr P((char **, u_int32 *));
+	prs_inetaddr P((char **, u_int32_t *));
 PRIVATE void
 	read_entry P((FILE *, char *, u_int *));
 PRIVATE char *
@@ -410,7 +418,7 @@ readtab(force)
 		 */
 		if (goodname(hp->hostname->string)) {
 			char *hn = hp->hostname->string;
-			u_int32 value;
+			u_int32_t value;
 			if (hp->flags.iaddr == 0) {
 				if (lookup_ipa(hn, &value)) {
 					report(LOG_ERR, "can not get IP addr for %s", hn);
@@ -792,8 +800,8 @@ eval_symbol(symbol, hp)
 	char tmpstr[MAXSTRINGLEN];
 	byte *tmphaddr;
 	struct symbolmap *symbolptr;
-	u_int32 value;
-	int32 timeoff;
+	u_int32_t value;
+	int32_t timeoff;
 	int i, numsymbols;
 	unsigned len;
 	int optype;					/* Indicates boolean, addition, or deletion */
@@ -1125,7 +1133,16 @@ eval_symbol(symbol, hp)
 		PARSE_UINT(min_wait);
 		break;
 
-		/* XXX - Add new tags here */
+#ifdef DHCP		
+	/* PeP hic facet. */			
+	case SYM_DHCP_LEASE:
+		PARSE_UINT(dhcp_lease);
+		break;
+
+		/* XXX - Add new DHCP tags here */
+#endif
+
+	/* XXX - Add new tags here */
 
 	default:
 		return E_UNKNOWN_SYMBOL;
@@ -1506,6 +1523,9 @@ fill_defaults(hp, src)
 	DUP_COPY(min_wait);
 
 	/* XXX - Add new tags here */
+#ifdef	DHCP
+	DUP_COPY(dhcp_lease); /* PeP hic facet */
+#endif
 
 	DUP_LINK(generic);
 
@@ -1623,7 +1643,7 @@ get_addresses(src)
 		if (!**src) {			/* Quit if nothing more */
 			break;
 		}
-		if (prs_inetaddr(src, &(address1->s_addr)) < 0) {
+		if (prs_inetaddr(src, (u_int32_t *) &(address1->s_addr)) < 0) {
 			break;
 		}
 		address1++;				/* Point to next address slot */
@@ -1666,11 +1686,11 @@ get_addresses(src)
 PRIVATE int
 prs_inetaddr(src, result)
 	char **src;
-	u_int32 *result;
+	u_int32_t *result;
 {
 	char tmpstr[MAXSTRINGLEN];
-	register u_int32 value;
-	u_int32 parts[4], *pp;
+	register u_int32_t value;
+	u_int32_t parts[4], *pp;
 	int n;
 	char *s, *t;
 
@@ -1850,11 +1870,11 @@ interp_byte(src, retbyte)
  * point to the first illegal character.
  */
 
-PRIVATE u_int32
+PRIVATE u_int32_t
 get_u_long(src)
 	char **src;
 {
-	register u_int32 value, base;
+	register u_int32_t value, base;
 	char c;
 
 	/*

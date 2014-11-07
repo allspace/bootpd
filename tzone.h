@@ -1,3 +1,3 @@
 /* tzone.h */
-extern int32 secondswest;
+extern int32_t secondswest;
 extern void tzone_init();

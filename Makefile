@@ -9,10 +9,10 @@
 # OPTion DEFinitions:
 # Remove the -DVEND_CMU if you don't wish to support the "CMU vendor format"
 # in addition to the RFC1048 format.  Leaving out DEBUG saves little.
-OPTDEFS= -DSYSLOG -DVEND_CMU -DDEBUG
+OPTDEFS= -DSYSLOG -DVEND_CMU -DDHCP -DDEBUG -g -O2 -Wall
 
 # Uncomment and edit this to choose the facility code used for syslog.
-# LOG_FACILITY= "-DLOG_BOOTP=LOG_LOCAL2"
+LOG_FACILITY= "-DLOG_BOOTP=LOG_DAEMON"
 
 # SYStem DEFinitions:
 # Either uncomment some of the following, or do:
@@ -27,31 +27,35 @@ OPTDEFS= -DSYSLOG -DVEND_CMU -DDEBUG
 # FILE DEFinitions:
 # The next few lines may be uncommented and changed to alter the default
 # filenames bootpd uses for its configuration and dump files.
-#CONFFILE= -DCONFIG_FILE=\"/usr/etc/bootptab\"
-#DUMPFILE= -DDUMPTAB_FILE=\"/usr/etc/bootpd.dump\"
-#FILEDEFS= $(CONFFILE) $(DUMPFILE)
+CONFFILE= -DCONFIG_FILE=\"/etc/bootptab\"
+DUMPFILE= -DDUMPTAB_FILE=\"/var/run/bootpd.dump\"
+FILEDEFS= $(CONFFILE) $(DUMPFILE)
+
+GLIBC=$(shell grep -s -c __GLIBC__ /usr/include/features.h)
 
 # MORE DEFinitions (whatever you might want to add)
 # One might define NDEBUG (to remove "assert()" checks).
-MOREDEFS=
+ifeq ($(GLIBC),0)
+MOREDEFS=-include /usr/include/linux/netdevice.h
+endif
 
-INSTALL=/usr/bin/install
-DESTDIR=
-BINDIR=/usr/etc
-MANDIR=/usr/local/man
+INSTALL=install
+DESTDIR=${BASEDIR}
+BINDIR=/usr/sbin
+MANDIR=/usr/share/man
 
 CFLAGS= $(OPTDEFS) $(SYSDEFS) $(FILEDEFS) $(MOREDEFS)
 PROGS= bootpd bootpef bootpgw bootptest
 TESTS= trylook trygetif trygetea
 
-all: $(PROGS) $(TESTS)
+all: $(PROGS) # $(TESTS)
 
 system: install
 
 install: $(PROGS)
 	-for f in $(PROGS) ;\
 	do \
-		$(INSTALL) -c -s $$f $(DESTDIR)$(BINDIR) ;\
+		$(INSTALL) -c -o root -g root -m 0755 $$f $(DESTDIR)$(BINDIR) ;\
 	done
 
 MAN5= bootptab.5
@@ -59,12 +63,13 @@ MAN8= bootpd.8 bootpef.8 bootptest.8
 install.man: $(MAN5) $(MAN8)
 	-for f in $(MAN5) ;\
 	do \
-		$(INSTALL) -c -m 644 $$f $(DESTDIR)$(MANDIR)/man5 ;\
+		$(INSTALL) -c -o root -g root -m 0644 $$f $(DESTDIR)$(MANDIR)/man5 ;\
 	done
 	-for f in $(MAN8) ;\
 	do \
-		$(INSTALL) -c -m 644 $$f $(DESTDIR)$(MANDIR)/man8 ;\
+		$(INSTALL) -c -o root -g root -m 0644 $$f $(DESTDIR)$(MANDIR)/man8 ;\
 	done
+	(cd $(DESTDIR)$(MANDIR)/man8 && ln -s bootpd.8 bootpgw.8)
 
 clean:
 	-rm -f core *.o
@@ -98,10 +103,6 @@ epix211:
 # IRIX 5.X (Silicon Graphics)
 irix:
 	$(MAKE) SYSDEFS= SYSLIBS=
-
-# Linux 1.1.80+ on [34]86
-linux:
-	$(MAKE) SYSDEFS="-O6 -Wall -fomit-frame-pointer"
 
 # SunOS 4.X
 sunos4:
