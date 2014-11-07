@@ -202,3 +202,64 @@ readfile.o : bootp.h bptypes.h hash.h hwaddr.h lookup.h readfile.h
 readfile.o : report.h tzone.h bootpd.h
 report.o : report.h
 tzone.o : bptypes.h report.h tzone.h
+
+DIST_FILES= \
+	Announce \
+	Announce.old \
+	bootpd.8 \
+	bootpd.c \
+	bootpd.h \
+	bootpef.8 \
+	bootpef.c \
+	bootpgw.c \
+	bootp.h \
+	bootptab.5 \
+	bootptab.cmu \
+	bootptab.mcs \
+	bootptest.8 \
+	bootptest.c \
+	bootptest.h \
+	bptypes.h \
+	Changes \
+	configure \
+	ConvOldTab.sh \
+	dovend.c \
+	dovend.h \
+	dumptab.c \
+	getether.c \
+	getether.h \
+	getif.c \
+	getif.h \
+	hash.c \
+	hash.h \
+	hwaddr.c \
+	hwaddr.h \
+	Installation \
+	lookup.c \
+	lookup.h \
+	Makefile \
+	patchlevel.h \
+	print-bootp.c \
+	Problems \
+	readfile.c \
+	readfile.h \
+	README \
+	report.c \
+	report.h \
+	strerror.c \
+	syslog.conf \
+	syslog.h \
+	ToDo \
+	trygetea.c \
+	trygetif.c \
+	trylook.c \
+	tzone.c \
+	tzone.h \
+	VERSION
+
+dist:
+	rm -rf bootp-$(shell cat VERSION)*
+	mkdir bootp-$(shell cat VERSION)
+	cp $(DIST_FILES) bootp-$(shell cat VERSION)/.
+	tar zvcf bootp-$(shell cat VERSION).tar.gz bootp-$(shell cat VERSION)
+
