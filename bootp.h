@@ -37,7 +37,13 @@ SOFTWARE.
 #define BP_SNAME_LEN	 64
 #define BP_FILE_LEN	128
 #define BP_VEND_LEN	 64
+#if 0
+/* One of Debian's patched added this next line. */
 #define BP_MINPKTSZ	sizeof(struct bootp)
+#else
+/* This is what was originally here and seems more correct to me. */
+#define BP_MINPKTSZ	300
+#endif
 
 struct bootp {
     unsigned char    bp_op;			/* packet opcode type */
