@@ -1,0 +1,4 @@
+#!/bin/bash
+
+echo "now run make && make install"
+
