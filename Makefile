@@ -258,8 +258,8 @@ DIST_FILES= \
 	VERSION
 
 dist:
-	rm -rf bootp-$(shell cat VERSION)*
-	mkdir bootp-$(shell cat VERSION)
-	cp $(DIST_FILES) bootp-$(shell cat VERSION)/.
-	tar zvcf bootp-$(shell cat VERSION).tar.gz bootp-$(shell cat VERSION)
+	rm -rf bootpd-$(shell cat VERSION)*
+	mkdir bootpd-$(shell cat VERSION)
+	cp $(DIST_FILES) bootpd-$(shell cat VERSION)/.
+	tar zvcf bootpd-$(shell cat VERSION).tar.gz bootpd-$(shell cat VERSION)
 
