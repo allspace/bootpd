@@ -1368,7 +1368,8 @@ dovend_rfc1048(bp, hp, bootsize)
 			unsigned short msgsz = 0;
 			
 			p = vp + 4;
-			ep = p + BP_VEND_LEN - 4;
+			//ep = p + BP_VEND_LEN - 4;
+			ep = bp + pktlen;	//process all recieved data
 			while (p < ep) {
 				tag = *p++;
 				/* Check for tags with no data first. */
@@ -1406,6 +1407,15 @@ dovend_rfc1048(bp, hp, bootsize)
 						);
 					}
 					break;
+				case 93:  //get arch, and check if it's UEFI boot
+					if(len==2)
+					{
+						unsigned short arch = ntohs(*(unsigned short*)p);
+						if(arch==7)
+						{
+							strncat(bp->bp_file, ".efi", sizeof(bp->bp_file)-1);
+						}
+					}
 #endif
 				} /* switch */
 				p += len;
