@@ -48,7 +48,7 @@ SOFTWARE.
 #define MAXSTRINGLEN		 80	/* Max string length */
 
 /* Local definitions: */
-#define MAX_MSG_SIZE		(64*1024) /* Maximum packet size */
+#define MAX_MSG_SIZE		(2*1024) /* Maximum packet size */
 
 
 /*
