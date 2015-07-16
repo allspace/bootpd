@@ -1383,6 +1383,7 @@ dovend_rfc1048(bp, hp, bootsize)
 					if (len == 2) {
 						bcopy(p, (char*)&msgsz, 2);
 						msgsz = ntohs(msgsz);
+						if(msgsz > MAX_MSG_SIZE) msgsz = MAX_MSG_SIZE;
 					}
 					break;
 				case TAG_SUBNET_MASK:
