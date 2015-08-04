@@ -1369,7 +1369,7 @@ dovend_rfc1048(bp, hp, bootsize)
 			
 			p = vp + 4;
 			//ep = p + BP_VEND_LEN - 4;
-			ep = bp + pktlen;	//process all recieved data
+			ep = ((char*)bp) + pktlen;	//process all recieved data
 			while (p < ep) {
 				tag = *p++;
 				/* Check for tags with no data first. */
