@@ -1,6 +1,8 @@
 Enhancements include:
 1. Correct an implementation error so that it can support some new PXE firmware like vSphere 6 VM.
-2. Add a quick but dirty way to support UEFI boot.
+2. Add a quick but dirty way to support EFI boot: 
+   for BIOS boot, it will look for boot file; for EFI boot, it will look for boot file with .efi extension.
+   No change in configuration file. Just use the additional file extension name ".efi" to distinguish BIOS boot file or EFI boot file.
 
 ---------------------------------------------------------------------------------------------
 
